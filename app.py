@@ -1,107 +1,72 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, session
 import json
 import os
 
-# Configurar o Flask
 app = Flask(__name__)
-app.secret_key = "chave_secreta_segura"  # Usado para mensagens flash
+app.secret_key = 'minha_chave_secreta'  # Segurança para sessão
 
-# Função para validar senha forte
-def senha_valida(senha):
-    if len(senha) < 8:
-        return False
-
-    tem_letra = False
-    tem_numero = False
-
-    for caractere in senha:
-        if caractere.isalpha():
-            tem_letra = True
-        if caractere.isdigit():
-            tem_numero = True
-
-    return tem_letra and tem_numero
-
-# Função para ler o arquivo de usuários
-def ler_usuarios():
-    if os.path.exists("usuarios.json"):
-        with open("usuarios.json", "r") as f:
+# Função para carregar usuários
+def carregar_usuarios():
+    if os.path.exists('usuarios.json'):
+        with open('usuarios.json', 'r') as f:
             return json.load(f)
-    else:
-        return []
+    return []
 
-# Função para salvar os usuários
+# Função para salvar usuários
 def salvar_usuarios(usuarios):
-    with open("usuarios.json", "w") as f:
+    with open('usuarios.json', 'w') as f:
         json.dump(usuarios, f, indent=4)
 
-# Rota inicial: Escolher Login ou Cadastro
-@app.route("/")
-def index():
-    return render_template("index.html")
+# Rota inicial - Login
+@app.route('/', methods=['GET', 'POST'])
+def login():
+    if request.method == 'POST':
+        usuarios = carregar_usuarios()
+        username = request.form['username']
+        password = request.form['password']
+        
+        for usuario in usuarios:
+            if usuario['usuario'] == username and usuario['senha'] == password:
+                session['usuario'] = username
+                return redirect(url_for('menu'))
+        return "Usuário ou senha inválidos."
+    return render_template('login.html')
 
 # Rota de cadastro
-@app.route("/cadastro", methods=["GET", "POST"])
+@app.route('/cadastro', methods=['GET', 'POST'])
 def cadastro():
-    if request.method == "POST":
-        usuario = request.form["usuario"]
-        email = request.form["email"]
-        senha = request.form["senha"]
-        confirmar = request.form["confirmar"]
+    if request.method == 'POST':
+        usuarios = carregar_usuarios()
+        username = request.form['username']
+        email = request.form['email']
+        password = request.form['password']
 
-        usuarios = ler_usuarios()
+        for usuario in usuarios:
+            if usuario['usuario'] == username or usuario['email'] == email:
+                return "Usuário ou e-mail já cadastrado."
 
-        # Confirmação de senha
-        if senha != confirmar:
-            flash("❌ As senhas não coincidem!", "error")
-            return redirect(url_for('cadastro'))
-
-        # Validação de senha forte
-        if not senha_valida(senha):
-            flash("⚠️ A senha precisa ter no mínimo 8 caracteres, uma letra e um número.", "error")
-            return redirect(url_for('cadastro'))
-
-        # Verificar se já existe usuário ou email
-        for user in usuarios:
-            if user['usuario'] == usuario:
-                flash(f"❌ Nome de usuário '{usuario}' já existe!", "error")
-                return redirect(url_for('cadastro'))
-            if user['email'] == email:
-                flash(f"❌ E-mail '{email}' já cadastrado!", "error")
-                return redirect(url_for('cadastro'))
-
-        novo = {
-            "usuario": usuario,
+        novo_usuario = {
+            "usuario": username,
             "email": email,
-            "senha": senha
+            "senha": password
         }
-        usuarios.append(novo)
+        usuarios.append(novo_usuario)
         salvar_usuarios(usuarios)
-
-        flash("✅ Cadastro realizado com sucesso!", "success")
-        return redirect(url_for('index'))
-
-    return render_template("cadastro.html")
-
-# Rota de login
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "POST":
-        usuario = request.form["usuario"]
-        senha = request.form["senha"]
-
-        usuarios = ler_usuarios()
-
-        for user in usuarios:
-            if user["usuario"] == usuario and user["senha"] == senha:
-                flash(f"✅ Login bem-sucedido! Bem-vindo, {usuario}!", "success")
-                return redirect(url_for('index'))
-
-        flash("❌ Usuário ou senha incorretos!", "error")
         return redirect(url_for('login'))
+    return render_template('cadastro.html')
 
-    return render_template("login.html")
+# Rota do menu após login
+@app.route('/menu')
+def menu():
+    if 'usuario' not in session:
+        return redirect(url_for('login'))
+    return render_template('menu.html', usuario=session['usuario'])
 
-# Rodar a aplicação
-if __name__ == "__main__":
+# Rota para logout
+@app.route('/logout')
+def logout():
+    session.pop('usuario', None)
+    return redirect(url_for('login'))
+
+if __name__ == '__main__':
     app.run(debug=True)
